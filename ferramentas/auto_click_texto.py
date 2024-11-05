@@ -11,10 +11,10 @@ import time
 from PIL import ImageGrab
 
 # Defina o caminho para o executável do Tesseract
-pytesseract.pytesseract.tesseract_cmd = r'D:\my_bots\Throne_and_Liberty_2\Tesseract-OCR\tesseract.exe'
+pytesseract.pytesseract.tesseract_cmd = r'D:\my_bots\te\Tesseract-OCR\tesseract.exe'
 
 # Defina o caminho para o diretório 'tessdata'
-os.environ['TESSDATA_PREFIX'] = r'D:\my_bots\Throne_and_Liberty_2\Tesseract-OCR\tessdata'
+os.environ['TESSDATA_PREFIX'] = r'D:\my_bots\te\Tesseract-OCR\tessdata'
 # Função para capturar a tela e localizar o texto
 def find_and_move_to_text(target_text):
     # Captura uma imagem da tela
