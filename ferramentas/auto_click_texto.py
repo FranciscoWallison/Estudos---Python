@@ -9,8 +9,8 @@ import tkinter as tk
 from tkinter import simpledialog
 
 # Defina o caminho para o executável do Tesseract
-pytesseract.pytesseract.tesseract_cmd = r'D:\my_bots\tl\Tesseract-OCR\tesseract.exe'
-os.environ['TESSDATA_PREFIX'] = r'D:\my_bots\tl\Tesseract-OCR\tessdata'
+pytesseract.pytesseract.tesseract_cmd = r'D:\my_bots\Throne_and_Liberty_2\Tesseract-OCR\tesseract.exe'
+os.environ['TESSDATA_PREFIX'] = r'D:\my_bots\Throne_and_Liberty_2\Tesseract-OCR\tessdata'
 
 # Fator de escala para redimensionamento
 scale_percent = 150
