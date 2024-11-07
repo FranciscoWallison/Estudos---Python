@@ -1,186 +1,204 @@
-import cv2
-import pyautogui
-import numpy as np
-import pytesseract
-import mss
-import os
-import time
 import tkinter as tk
-from tkinter import simpledialog
+import pyautogui
+import pytesseract
+import cv2
+import numpy as np
+import time
+import os
+import threading
+from PIL import Image
+import random
 
-# Defina o caminho para o executável do Tesseract
-pytesseract.pytesseract.tesseract_cmd = r'D:\my_bots\Throne_and_Liberty_2\Tesseract-OCR\tesseract.exe'
-os.environ['TESSDATA_PREFIX'] = r'D:\my_bots\Throne_and_Liberty_2\Tesseract-OCR\tessdata'
+# Configuração do caminho do Tesseract e do OpenCV
+pytesseract.pytesseract.tesseract_cmd = r'D:\my_bots\t\Tesseract-OCR\tesseract.exe'
+os.environ['TESSDATA_PREFIX'] = r'D:\my_bots\t\Tesseract-OCR\tessdata'
 
-# Fator de escala para redimensionamento
-scale_percent = 150
+class TextSearchApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Bot de Combate a Mobs")
 
-# Variável global para armazenar a região de captura
-region_of_interest = None
+        # Lista de textos a serem procurados
+        self.text_list = []
+        self.load_texts_from_file()
 
-# Função para capturar tela e localizar sequência de texto
-def find_and_move_to_text(text_list, region=None, interval=0.5, max_attempts=5):
-    current_index = 0  # Começa no primeiro texto da lista
+        # Área para adicionar textos
+        tk.Label(root, text="Adicionar texto à lista de busca:").pack(pady=5)
+        self.entry_text = tk.Entry(root)
+        self.entry_text.pack(pady=5)
+        tk.Button(root, text="Adicionar Texto", command=self.add_text).pack(pady=5)
 
-    with mss.mss() as sct:
-        monitor = sct.monitors[1] if region is None else region
+        # Área para exibir textos cadastrados
+        tk.Label(root, text="Textos Cadastrados:").pack(pady=5)
+        self.text_display = tk.Text(root, height=5, width=50, state='disabled')
+        self.text_display.pack(pady=5)
+        self.update_text_display()
 
+        # Botões para selecionar região e buscar texto
+        tk.Button(root, text="Selecionar Região", command=self.start_region_selection).pack(pady=10)
+        tk.Button(root, text="Iniciar Bot de Combate", command=self.start_combat_thread).pack(pady=10)
+
+        # Área de logs
+        tk.Label(root, text="Logs de Busca:").pack(pady=5)
+        self.log_text = tk.Text(root, height=10, width=50, state='disabled')
+        self.log_text.pack(pady=5)
+
+        # Variáveis de controle para seleção de região
+        self.start_x = self.start_y = self.end_x = self.end_y = 0
+        self.rect = None
+        self.selecting = False
+
+    def log_message(self, message):
+        # Função para exibir mensagens na área de log
+        self.log_text.config(state='normal')
+        self.log_text.insert(tk.END, message + "\n")
+        self.log_text.config(state='disabled')
+        self.log_text.see(tk.END)
+
+    def add_text(self):
+        # Adiciona um texto à lista e atualiza a exibição
+        text = self.entry_text.get().strip()
+        if text:
+            self.text_list.append(text)
+            self.save_texts_to_file()
+            self.update_text_display()
+            self.entry_text.delete(0, tk.END)
+            self.log_message(f"Texto '{text}' adicionado à lista de busca.")
+
+    def update_text_display(self):
+        # Atualiza a exibição dos textos cadastrados
+        self.text_display.config(state='normal')
+        self.text_display.delete(1.0, tk.END)
+        for text in self.text_list:
+            self.text_display.insert(tk.END, text + "\n")
+        self.text_display.config(state='disabled')
+
+    def save_texts_to_file(self):
+        # Salva a lista de textos em um arquivo txt
+        with open("text_list.txt", "w") as file:
+            for text in self.text_list:
+                file.write(text + "\n")
+
+    def load_texts_from_file(self):
+        # Carrega a lista de textos de um arquivo txt
+        if os.path.exists("text_list.txt"):
+            with open("text_list.txt", "r") as file:
+                self.text_list = [line.strip() for line in file if line.strip()]
+
+    def start_region_selection(self):
+        # Cria uma janela de tela cheia para a seleção de região
+        self.selection_window = tk.Toplevel(self.root)
+        self.selection_window.attributes("-fullscreen", True)
+        self.selection_window.attributes("-alpha", 0.3)
+        self.selection_window.bind("<Button-1>", self.on_mouse_down)
+        self.selection_window.bind("<B1-Motion>", self.on_mouse_drag)
+        self.selection_window.bind("<ButtonRelease-1>", self.on_mouse_up)
+
+    def on_mouse_down(self, event):
+        # Início da seleção da região
+        self.start_x, self.start_y = event.x, event.y
+        self.selecting = True
+        self.rect = tk.Canvas(self.selection_window, cursor="cross")
+        self.rect.place(x=0, y=0, width=self.selection_window.winfo_screenwidth(), height=self.selection_window.winfo_screenheight())
+
+    def on_mouse_drag(self, event):
+        # Atualiza o retângulo conforme o mouse é arrastado
+        if self.selecting:
+            self.rect.delete("selection")
+            self.end_x, self.end_y = event.x, event.y
+            self.rect.create_rectangle(self.start_x, self.start_y, self.end_x, self.end_y, outline="red", tag="selection")
+
+    def on_mouse_up(self, event):
+        # Finaliza a seleção de região
+        self.selecting = False
+        self.selection_window.destroy()
+
+        # Corrige a posição e tamanho da região selecionada
+        self.x1, self.y1 = min(self.start_x, self.end_x), min(self.start_y, self.end_y)
+        self.x2, self.y2 = max(self.start_x, self.end_x), max(self.start_y, self.end_y)
+        self.log_message(f"Região selecionada: ({self.x1}, {self.y1}) a ({self.x2}, {self.y2})")
+
+    def start_combat_thread(self):
+        # Inicia uma nova thread para o bot de combate a mobs
+        combat_thread = threading.Thread(target=self.start_combat_bot)
+        combat_thread.daemon = True
+        combat_thread.start()
+
+    def start_combat_bot(self):
+        # Inicia o bot para combate a mobs
         while True:
-            # Captura a tela na região definida
-            screenshot = np.array(sct.grab(monitor))
-            gray = cv2.cvtColor(screenshot, cv2.COLOR_BGR2GRAY)
+            if self.search_and_attack():
+                self.log_message("Iniciando novo ciclo de busca de mobs.")
+            else:
+                self.log_message("Todos os mobs da lista foram verificados. Reiniciando busca...")
 
-            # Pré-processamento: Aumenta o contraste e redimensiona a imagem para melhorar o OCR
-            _, gray = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY_INV)
+    def search_and_attack(self):
+        # Captura a região selecionada e busca os textos em sequência
+        screenshot = pyautogui.screenshot(region=(self.x1, self.y1, self.x2 - self.x1, self.y2 - self.y1))
+        text_data = pytesseract.image_to_string(screenshot)
 
-            # Redimensiona a imagem para aumentar a precisão
-            width = int(gray.shape[1] * scale_percent / 100)
-            height = int(gray.shape[0] * scale_percent / 100)
-            gray_resized = cv2.resize(gray, (width, height), interpolation=cv2.INTER_LINEAR)
+        for text in self.text_list:
+            if text.lower() in text_data.lower():
+                # Mover o cursor e realizar duplo clique
+                text_boxes = pytesseract.image_to_data(screenshot, output_type=pytesseract.Output.DICT)
+                for i, word in enumerate(text_boxes["text"]):
+                    if word.lower() == text.split()[0].lower():
+                        x = self.x1 + text_boxes["left"][i]
+                        y = self.y1 + text_boxes["top"][i]
+                        pyautogui.moveTo(x, y)
+                        pyautogui.doubleClick()
+                        self.log_message(f"Texto '{text}' encontrado. Realizando duplo clique.")
+                        time.sleep(0.5)
 
-            # Configuração do OCR
-            ocr_result = pytesseract.image_to_data(
-                gray_resized, config="--oem 3 --psm 6", output_type=pytesseract.Output.DICT
-            )
+                        # Repete o ataque enquanto o monstro está focado
+                        while self.check_for_monster_focus():
+                            # Segurar a tecla "E" por 5 segundos
+                            self.log_message("Atacando com a tecla 'E'.")
+                            pyautogui.keyDown('e')
+                            time.sleep(5)
+                            pyautogui.keyUp('e')
 
-            attempts = 0
-            while attempts < max_attempts:
-                target_text = text_list[current_index][::-1]  # Desinverte o texto
-                target_words = target_text.lower().split()
-                found_positions = []
-                match_index = 0
+                        # Se o monstro não está mais focado, reiniciar a busca
+                        self.log_message("Monstro não encontrado. Reiniciando busca de novo alvo.")
+                        self.simulate_mistake()
+                        return False  # Procura um novo alvo
 
-                for i, text in enumerate(ocr_result['text']):
-                    if match_index < len(target_words) and target_words[match_index] in text.lower():
-                        # Ajusta as coordenadas para a escala original
-                        x = int(ocr_result['left'][i] * 100 / scale_percent)
-                        y = int(ocr_result['top'][i] * 100 / scale_percent)
-                        w = int(ocr_result['width'][i] * 100 / scale_percent)
-                        h = int(ocr_result['height'][i] * 100 / scale_percent)
-                        found_positions.append((x + w // 2, y + h // 2))
-                        match_index += 1
+        return False  # Nenhum texto encontrado na lista
 
-                        if match_index == len(target_words):
-                            center_x = monitor['left'] + found_positions[0][0]
-                            center_y = monitor['top'] + found_positions[0][1]
-                            pyautogui.moveTo(center_x, center_y, duration=0.5)
-                            print(f"Texto '{target_text}' encontrado e cursor movido para ({center_x}, {center_y})")
-                            return True
+    def simulate_mistake(self):        
+        mistake_key = str(random.randint(1, 4))
 
-                attempts += 1
-                print(f"Tentativa {attempts} para '{target_text}' falhou. Tentando novamente...")
-                time.sleep(interval)
+        pyautogui.press(mistake_key)
+        # Pausa aleatória para simular o erro
+        time.sleep(random.uniform(0.5, 1.5))
+        pyautogui.press(mistake_key)
 
-            # Passa para o próximo texto ou volta ao início se não encontrar nenhum
-            current_index = (current_index + 1) % len(text_list)
-            print(f"Não encontrou o texto. Mudando para o próximo da lista de prioridades...")
+    def screenshot(self):
+        screen = pyautogui.screenshot()
+        screen = np.array(screen)
+        return cv2.cvtColor(screen, cv2.COLOR_RGB2GRAY)
+    
+    def check_for_monster_focus(self):
 
-# Função para criar a interface de entrada e seleção de região
-def get_text_priorities():
-    global region_of_interest
+        screen_gray = self.screenshot()
+        
+        monster_images_paths = [
+            "path/to/monster_focused.png",
+            "path/to/monster_focused_2.png",
+            "path/to/monster_focused_4.png"
+        ]
 
-    # Cria a janela principal
-    root = tk.Tk()
-    root.title("Configuração do OCR")
+        templates = [cv2.imread(path, 0) for path in monster_images_paths]
 
-    text_priorities = []
+        for template in templates:
+            res = cv2.matchTemplate(screen_gray, template, cv2.TM_CCOEFF_NORMED)
+            threshold = 0.8
+            if res.max() >= threshold:
+                self.log_message(f"Monstro encontrado com pontuação de {res.max()}")
+                return True
+        return False
 
-    # Função para desenhar a região de interesse
-    def select_region():
-        root.withdraw()  # Oculta a janela principal durante a seleção
-
-        # Espera um pouco para evitar capturar o clique do botão
-        time.sleep(0.5)
-
-        # Captura a tela inteira
-        screenshot = pyautogui.screenshot()
-        screen_width, screen_height = screenshot.size
-
-        # Cria uma janela de tela cheia para desenhar a região
-        select_root = tk.Toplevel()
-        select_root.overrideredirect(True)
-        select_root.attributes('-alpha', 0.3)  # Janela semi-transparente
-        select_root.geometry(f"{screen_width}x{screen_height}+0+0")
-
-        canvas = tk.Canvas(select_root, width=screen_width, height=screen_height)
-        canvas.pack()
-
-        coords = {}
-
-        def on_click(event):
-            coords['x_start'] = event.x
-            coords['y_start'] = event.y
-
-        def on_drag(event):
-            canvas.delete("selection")
-            x_start = coords.get('x_start', event.x)
-            y_start = coords.get('y_start', event.y)
-            canvas.create_rectangle(x_start, y_start, event.x, event.y, outline='red', tag="selection")
-
-        def on_release(event):
-            coords['x_end'] = event.x
-            coords['y_end'] = event.y
-            select_root.destroy()
-
-            x_start = coords['x_start']
-            y_start = coords['y_start']
-            x_end = coords['x_end']
-            y_end = coords['y_end']
-
-            # Define o formato esperado pela função find_and_move_to_text
-            region_of_interest = {
-                "left": min(x_start, x_end),
-                "top": min(y_start, y_end),
-                "width": abs(x_end - x_start),
-                "height": abs(y_end - y_start),
-            }
-            print("Região de interesse definida:", region_of_interest)
-            root.deiconify()  # Exibe novamente a janela principal
-
-        canvas.bind("<ButtonPress-1>", on_click)
-        canvas.bind("<B1-Motion>", on_drag)
-        canvas.bind("<ButtonRelease-1>", on_release)
-
-        select_root.mainloop()
-
-    # Adiciona um botão para iniciar a seleção de região
-    region_button = tk.Button(root, text="Selecionar Região de Captura", command=select_region)
-    region_button.pack(pady=10)
-
-    # Função para adicionar textos à lista
-    def add_text():
-        user_input = text_entry.get()
-        if user_input:
-            text_priorities.append(user_input[::-1])  # Adiciona o texto invertido para ofuscação
-            listbox.insert(tk.END, user_input)
-            text_entry.delete(0, tk.END)
-
-    # Campo de entrada de texto
-    text_entry = tk.Entry(root, width=40)
-    text_entry.pack(pady=5)
-
-    add_button = tk.Button(root, text="Adicionar Texto", command=add_text)
-    add_button.pack(pady=5)
-
-    # Lista para mostrar os textos adicionados
-    listbox = tk.Listbox(root, width=50)
-    listbox.pack(pady=5)
-
-    # Botão para finalizar a entrada e iniciar a busca
-    def start_search():
-        root.destroy()
-
-    start_button = tk.Button(root, text="Iniciar Busca", command=start_search)
-    start_button.pack(pady=10)
-
-    root.mainloop()
-    return text_priorities
-
-# Obter os textos de prioridade e a região de interesse do usuário
-text_priority_list = get_text_priorities()
-
-# Verifica se a lista não está vazia antes de iniciar a busca
-if text_priority_list:
-    find_and_move_to_text(text_priority_list, region=region_of_interest, interval=1)
-else:
-    print("Nenhum texto foi inserido.")
+# Inicializa a interface gráfica
+root = tk.Tk()
+app = TextSearchApp(root)
+root.mainloop()
