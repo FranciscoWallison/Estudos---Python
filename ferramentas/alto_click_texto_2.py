@@ -6,8 +6,8 @@ from PIL import Image
 import os
 
 # Definindo caminho do Tesseract
-pytesseract.pytesseract.tesseract_cmd = r'D:\my_bots\Throne_and_Liberty_2\Tesseract-OCR\tesseract.exe'
-os.environ['TESSDATA_PREFIX'] = r'D:\my_bots\Throne_and_Liberty_2\Tesseract-OCR\tessdata'
+pytesseract.pytesseract.tesseract_cmd = r'D:\my_bots\tl\Tesseract-OCR\tesseract.exe'
+os.environ['TESSDATA_PREFIX'] = r'D:\my_bots\tl\Tesseract-OCR\tessdata'
 
 class TextSearchApp:
     def __init__(self, root):
